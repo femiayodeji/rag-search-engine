@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -24,6 +25,9 @@ def main() -> None:
     tf_parser = subparsers.add_parser("tf", help="Get term frequency for a given document and term")
     tf_parser.add_argument("doc_id", type=int, help="Document ID")
     tf_parser.add_argument("term", type=str, help="Term to get frequency for")
+
+    idf_parser = subparsers.add_parser("idf", help="Get inverse document frequency for a given term")
+    idf_parser.add_argument("term", type=str, help="Term to get IDF for")
 
 
     args = parser.parse_args()
@@ -66,9 +70,25 @@ def main() -> None:
                 print("Cache files not found. Please build the index first.")
                 exit(1)
             doc_id = args.doc_id
-            term = args.term
+            processed_terms = process_str(args.term)
+            term = processed_terms[0] if processed_terms else args.term.lower()
             tf = index.get_tf(int(doc_id), term)
             print(tf)
+
+        case "idf":
+            index = InvertedIndex()
+            try:
+                index.load()
+            except FileNotFoundError:
+                print("Cache files not found. Please build the index first.")
+                exit(1)
+            processed_terms = process_str(args.term)
+            term = processed_terms[0] if processed_terms else args.term.lower()
+            document_ids = index.get_documents(term)
+            term_match_doc_count = len(document_ids)
+            total_doc_count = len(get_movies())
+            idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
+            print(f"Inverse document frequency of '{args.term}': {idf:.2f}")
 
         case _:
             parser.print_help()
