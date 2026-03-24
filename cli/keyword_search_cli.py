@@ -29,6 +29,10 @@ def main() -> None:
     idf_parser = subparsers.add_parser("idf", help="Get inverse document frequency for a given term")
     idf_parser.add_argument("term", type=str, help="Term to get IDF for")
 
+    tfidf_parser = subparsers.add_parser("tfidf", help="Get TF-IDF score for a given document and term")
+    tfidf_parser.add_argument("doc_id", type=int, help="Document ID")
+    tfidf_parser.add_argument("term", type=str, help="Term to get TF-IDF score for")
+
 
     args = parser.parse_args()
 
@@ -89,6 +93,23 @@ def main() -> None:
             total_doc_count = len(get_movies())
             idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
             print(f"Inverse document frequency of '{args.term}': {idf:.2f}")
+        case "tfidf":
+            index = InvertedIndex()
+            try:
+                index.load()
+            except FileNotFoundError:
+                print("Cache files not found. Please build the index first.")
+                exit(1)
+            doc_id = args.doc_id
+            processed_terms = process_str(args.term)
+            term = processed_terms[0] if processed_terms else args.term.lower()
+            tf = index.get_tf(int(doc_id), term)
+            document_ids = index.get_documents(term)
+            term_match_doc_count = len(document_ids)
+            total_doc_count = len(get_movies())
+            idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
+            tf_idf = tf * idf
+            print(f"TF-IDF score of '{args.term}' in document '{args.doc_id}': {tf_idf:.2f}")    
 
         case _:
             parser.print_help()
