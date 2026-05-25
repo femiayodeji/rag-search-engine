@@ -30,6 +30,10 @@ def main() -> None:
     search_parser.add_argument("query_text", type=str, nargs='?', help="Query text to search for")
     search_parser.add_argument("--limit", type=int, default=5, help="Number of search results to return")
     
+    chunk_parser = subparsers.add_parser("chunk", help="Chunk a long text into smaller pieces")
+    chunk_parser.add_argument("query_text", type=str, nargs='?', help="Long text to chunk")
+    chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size of each chunk")
+
     args = parser.parse_args()
 
     match args.command:
@@ -55,6 +59,17 @@ def main() -> None:
             for i, result in enumerate(results):
                 print(f"{i+1}. {result['title']} (score: {result['score']:.4f})")
                 print(f"\t{result['description']}\n")
+
+        case "chunk":
+            if not args.query_text:
+                print("Error: query_text is required for the chunk command.")
+                sys.exit(1)
+            characters = args.query_text.split(" ")
+            n = args.chunk_size
+            chunks = [characters[i:i + n] for i in range(0, len(characters), n)]
+            print(f"Chunking {len(args.query_text)} characters")            
+            for i, chunk in enumerate(chunks):
+                print(f"Chunk {i+1}. {' '.join(chunk)}")
 
         case _:
             parser.print_help()
