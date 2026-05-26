@@ -33,6 +33,7 @@ def main() -> None:
     chunk_parser = subparsers.add_parser("chunk", help="Chunk a long text into smaller pieces")
     chunk_parser.add_argument("query_text", type=str, nargs='?', help="Long text to chunk")
     chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size of each chunk")
+    chunk_parser.add_argument("--overlap", type=int, default=0, help="Number of overlapping characters between chunks")
 
     args = parser.parse_args()
 
@@ -66,7 +67,8 @@ def main() -> None:
                 sys.exit(1)
             characters = args.query_text.split(" ")
             n = args.chunk_size
-            chunks = [characters[i:i + n] for i in range(0, len(characters), n)]
+            overlap = args.overlap
+            chunks = [characters[i:i + n] for i in range(0, len(characters), n - overlap)]
             print(f"Chunking {len(args.query_text)} characters")            
             for i, chunk in enumerate(chunks):
                 print(f"Chunk {i+1}. {' '.join(chunk)}")
