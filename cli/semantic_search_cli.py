@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sys
 from pathlib import Path
 from unittest import case
@@ -34,6 +35,12 @@ def main() -> None:
     chunk_parser.add_argument("query_text", type=str, nargs='?', help="Long text to chunk")
     chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size of each chunk")
     chunk_parser.add_argument("--overlap", type=int, default=0, help="Number of overlapping characters between chunks")
+
+    chunk_semantic_parser = subparsers.add_parser("semantic_chunk", help="Chunk a long text into smaller pieces and generate embeddings for each chunk")
+    chunk_semantic_parser.add_argument("query_text", type=str, nargs='?', help="Long text to chunk and generate embeddings for")
+    chunk_semantic_parser.add_argument("--max-chunk-size", type=int, default=4, help="Maximum size of each chunk")
+    chunk_semantic_parser.add_argument("--overlap", type=int, default=0, help="Number of overlapping characters between chunks")
+
 
     args = parser.parse_args()
 
@@ -72,6 +79,22 @@ def main() -> None:
             print(f"Chunking {len(args.query_text)} characters")            
             for i, chunk in enumerate(chunks):
                 print(f"Chunk {i+1}. {' '.join(chunk)}")
+
+        case "semantic_chunk":
+            if not args.query_text:
+                print("Error: query_text is required for the semantic_chunk command.")
+                sys.exit(1)
+
+            query_text = args.query_text
+            max_chunk_size = args.max_chunk_size
+            overlap = args.overlap
+
+            sentences = re.split(r"(?<=[.!?])\s+", query_text)
+            chunks = [sentences[i:i + max_chunk_size] for i in range(0, len(sentences), max_chunk_size - overlap)]
+
+            print(f"Semantically chunking {len(args.query_text)} characters")
+            for i, chunk in enumerate(chunks):
+                print(f"{i+1}. {' '.join(chunk)}")
 
         case _:
             parser.print_help()
