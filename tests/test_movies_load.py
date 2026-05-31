@@ -1,10 +1,16 @@
 import unittest
-from utils import load_data, get_movies
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+from cli.load_data import MovieData, get_movies, load_data
 
 class TestMoviesLoad(unittest.TestCase):
     def test_data_load(self):
         data = load_data()
-        self.assertIsInstance(data, dict)
+        self.assertIsInstance(data, MovieData)
+        self.assertIsInstance(data.movies, list)
 
     def test_get_movies(self):
         movies = get_movies()

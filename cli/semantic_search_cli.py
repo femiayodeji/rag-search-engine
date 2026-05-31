@@ -8,6 +8,7 @@ from unittest import case
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
+from cli.lib.chunk_semantic_search import ChunkedSemanticSearch, semantic_chunk_text
 from cli.lib.semantic_search import SemanticSearch, embed_query_text, embed_text, verify_model, verify_embeddings
 from cli.load_data import get_movies
 
@@ -41,6 +42,7 @@ def main() -> None:
     chunk_semantic_parser.add_argument("--max-chunk-size", type=int, default=4, help="Maximum size of each chunk")
     chunk_semantic_parser.add_argument("--overlap", type=int, default=0, help="Number of overlapping characters between chunks")
 
+    embed_chunks_parser = subparsers.add_parser("embed_chunks", help="Chunk a long text and generate embeddings for each chunk")
 
     args = parser.parse_args()
 
@@ -89,15 +91,22 @@ def main() -> None:
             max_chunk_size = args.max_chunk_size
             overlap = args.overlap
 
-            sentences = re.split(r"(?<=[.!?])\s+", query_text)
-            chunks = [sentences[i:i + max_chunk_size] for i in range(0, len(sentences), max_chunk_size - overlap)]
+            chunks = semantic_chunk_text(query_text, max_chunk_size, overlap)
 
             print(f"Semantically chunking {len(args.query_text)} characters")
             for i, chunk in enumerate(chunks):
                 print(f"{i+1}. {' '.join(chunk)}")
 
+        case "embed_chunks":
+            documents = get_movies()
+            chunked_semantic_search = ChunkedSemanticSearch()
+            chunk_embeddings = chunked_semantic_search.load_or_create_chunk_embeddings(documents)
+            print(f"Generated {len(chunk_embeddings)} chunked embeddings")
+
+
         case _:
             parser.print_help()
+
 
 if __name__ == "__main__":
     main()
