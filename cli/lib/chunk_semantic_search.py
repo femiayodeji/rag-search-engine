@@ -4,9 +4,11 @@ import json
 
 import numpy as np
 
-from cli.lib.semantic_search import SemanticSearch
+from cli.lib.semantic_search import SemanticSearch, cosine_similarity
 
 from typing import TypedDict
+
+from cli.search_utils import format_search_result
 
 
 class ChunkMetadata(TypedDict):
@@ -73,6 +75,36 @@ class ChunkedSemanticSearch(SemanticSearch):
         else:
             print("Cache file not found. Building chunk embeddings...")
             return self.build_chunk_embeddings(documents)
+
+    def search_chunks(self, query: str, limit: int = 10):
+        if self.chunk_embeddings is None:
+            raise ValueError("Chunk embeddings not found. Please build or load chunk embeddings first.")
+        
+        semantic_search = SemanticSearch()
+        query_embedding = semantic_search.generate_embedding(query)
+
+        chunk_scores = []
+
+        for chunk_idx, chunk_embedding in enumerate(self.chunk_embeddings):
+            similarity = cosine_similarity(query_embedding, chunk_embedding)
+            movie_metadata = self.chunk_metadata[chunk_idx]
+            chunk_scores.append({"chunk_idx": chunk_idx, "movie_idx": movie_metadata["movie_idx"], "score": similarity})
+
+        movie_index_to_score = {}
+        for score in chunk_scores:
+            movie_idx = score["movie_idx"]
+            if movie_idx not in movie_index_to_score or score["score"] > movie_index_to_score[movie_idx]:
+                movie_index_to_score[movie_idx] = score["score"]
+        
+        sorted_filtered_movies = sorted(movie_index_to_score.items(), key=lambda x: x[1], reverse=True)[:limit]
+        results = []
+        for movie_idx, score in sorted_filtered_movies:
+            document = self.document_map[movie_idx]
+            metadata = document
+            results.append(format_search_result(movie_idx, document["title"], document["description"], score, metadata))
+        return results
+
+        
 
 def semantic_chunk_text(text, max_chunk_size=4, overlap=0):
     sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", text) if sentence.strip()]
