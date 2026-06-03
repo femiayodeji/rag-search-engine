@@ -76,38 +76,65 @@ class ChunkedSemanticSearch(SemanticSearch):
             print("Cache file not found. Building chunk embeddings...")
             return self.build_chunk_embeddings(documents)
 
-    def search_chunks(self, query: str, limit: int = 10):
+    def search_chunks(self, query: str, limit: int = 10):        
+        query = query.strip()
+        if query == "":
+            return []
+        
         if self.chunk_embeddings is None:
             raise ValueError("Chunk embeddings not found. Please build or load chunk embeddings first.")
-        
-        semantic_search = SemanticSearch()
-        query_embedding = semantic_search.generate_embedding(query)
 
-        chunk_scores = []
+        query_embedding = self.generate_embedding(query)
 
-        for chunk_idx, chunk_embedding in enumerate(self.chunk_embeddings):
+        chunk_scores: list[dict] = []
+        for i, chunk_embedding in enumerate(self.chunk_embeddings):
             similarity = cosine_similarity(query_embedding, chunk_embedding)
-            movie_metadata = self.chunk_metadata[chunk_idx]
-            chunk_scores.append({"chunk_idx": chunk_idx, "movie_idx": movie_metadata["movie_idx"], "score": similarity})
+            metadata = self.chunk_metadata[i]
+            chunk_scores.append(
+                {
+                    "chunk_idx": metadata["chunk_idx"],
+                    "movie_idx": metadata["movie_idx"],
+                    "score": similarity,
+                }
+            )
 
-        movie_index_to_score = {}
-        for score in chunk_scores:
-            movie_idx = score["movie_idx"]
-            if movie_idx not in movie_index_to_score or score["score"] > movie_index_to_score[movie_idx]:
-                movie_index_to_score[movie_idx] = score["score"]
-        
-        sorted_filtered_movies = sorted(movie_index_to_score.items(), key=lambda x: x[1], reverse=True)[:limit]
+        movie_index_to_score: dict[int, float] = {}
+        for chunk_score in chunk_scores:
+            movie_idx = chunk_score["movie_idx"]
+            score = chunk_score["score"]
+            if movie_idx not in movie_index_to_score or score > movie_index_to_score[movie_idx]:
+                movie_index_to_score[movie_idx] = score
+
+        sorted_filtered_movies = sorted(
+            movie_index_to_score.items(), key=lambda item: item[1], reverse=True
+        )[:limit]
+
         results = []
         for movie_idx, score in sorted_filtered_movies:
-            document = self.document_map[movie_idx]
-            metadata = document
-            results.append(format_search_result(movie_idx, document["title"], document["description"], score, metadata))
+            movie = self.documents[movie_idx]
+            results.append(
+                format_search_result(
+                    movie["id"],
+                    movie["title"],
+                    movie["description"][:100],
+                    score,
+                    movie.get("metadata", {}),
+                )
+            )
+
         return results
 
         
 
 def semantic_chunk_text(text, max_chunk_size=4, overlap=0):
+    text = text.strip()
+    if not text:
+        return []
+    
     sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", text) if sentence.strip()]
+    if len(sentences) == 1 and not sentences[0].endswith((".", "!", "?")):
+        return sentences
+
     step = max_chunk_size - overlap
     if step <= 0:
         raise ValueError("overlap must be smaller than max_chunk_size")

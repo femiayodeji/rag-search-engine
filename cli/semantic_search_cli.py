@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-import re
 import sys
 from pathlib import Path
-from unittest import case
 
 
 if __package__ is None or __package__ == "":
@@ -10,6 +8,7 @@ if __package__ is None or __package__ == "":
 
 from cli.lib.chunk_semantic_search import ChunkedSemanticSearch, semantic_chunk_text
 from cli.lib.semantic_search import SemanticSearch, embed_query_text, embed_text, verify_model, verify_embeddings
+from cli.search_utils import load_movies
 from cli.load_data import get_movies
 
 import argparse
@@ -43,6 +42,13 @@ def main() -> None:
     chunk_semantic_parser.add_argument("--overlap", type=int, default=0, help="Number of overlapping characters between chunks")
 
     embed_chunks_parser = subparsers.add_parser("embed_chunks", help="Chunk a long text and generate embeddings for each chunk")
+
+    search_chunked_parser = subparsers.add_parser(
+        "search_chunked",
+        help="Search movies using chunk embeddings and aggregate movie-level scores",
+    )
+    search_chunked_parser.add_argument("query", type=str, help="Search query")
+    search_chunked_parser.add_argument("--limit", type=int, default=5, help="Number of search results to return")
 
     args = parser.parse_args()
 
@@ -83,7 +89,7 @@ def main() -> None:
                 print(f"Chunk {i+1}. {' '.join(chunk)}")
 
         case "semantic_chunk":
-            if not args.query_text:
+            if args.query_text is None:
                 print("Error: query_text is required for the semantic_chunk command.")
                 sys.exit(1)
 
@@ -95,13 +101,24 @@ def main() -> None:
 
             print(f"Semantically chunking {len(args.query_text)} characters")
             for i, chunk in enumerate(chunks):
-                print(f"{i+1}. {' '.join(chunk)}")
+                print(f"{i+1}. {chunk}")
 
         case "embed_chunks":
             documents = get_movies()
             chunked_semantic_search = ChunkedSemanticSearch()
             chunk_embeddings = chunked_semantic_search.load_or_create_chunk_embeddings(documents)
             print(f"Generated {len(chunk_embeddings)} chunked embeddings")
+
+        case "search_chunked":
+            documents = [dict(movie) for movie in load_movies()]
+            chunked_semantic_search = ChunkedSemanticSearch()
+            chunked_semantic_search.load_or_create_chunk_embeddings(documents)
+
+            results = chunked_semantic_search.search_chunks(args.query, args.limit)
+
+            for i, result in enumerate(results, start=1):
+                print(f"\n{i}. {result['title']} (score: {result['score']:.4f})")
+                print(f"   {result['document']}...")
 
 
         case _:
