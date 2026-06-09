@@ -1,7 +1,9 @@
 import os
 
+from cli.constants import get_correct_spelling_prompt
 from cli.inverted_index import InvertedIndex
 from cli.lib.chunk_semantic_search import ChunkedSemanticSearch
+from cli.llm_utils import llm_request
 
 
 class HybridSearch:
@@ -107,3 +109,9 @@ def hybrid_score(
     bm25_score: float, semantic_score: float, alpha: float = 0.5
 ) -> float:
     return alpha * bm25_score + (1 - alpha) * semantic_score
+
+def spelling_enhancement(query: str, method: str) -> str:
+    llm_response = llm_request(get_correct_spelling_prompt(query))
+    enhanced_query = llm_response.text.strip()
+    print(f"Enhanced query ({method}): '{query}' -> '{enhanced_query}'\n")
+    return enhanced_query

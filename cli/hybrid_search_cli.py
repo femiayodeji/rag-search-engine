@@ -6,7 +6,7 @@ if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from cli.load_data import get_movies
-from cli.lib.hybrid_search import HybridSearch, normalize_scores
+from cli.lib.hybrid_search import HybridSearch, normalize_scores, spelling_enhancement
 
 import argparse
 
@@ -27,6 +27,7 @@ def main() -> None:
     ranked_parser.add_argument("query", type=str, help="Search query")
     ranked_parser.add_argument("--k", type=int, default=60, help="RRF parameter k (default: 60)")
     ranked_parser.add_argument("--limit", type=int, default=5, help="Number of results to return (default: 5)")
+    ranked_parser.add_argument("--enhance", type=str, choices=["spell"], help="Query enhancement method")
 
     args = parser.parse_args()
 
@@ -56,10 +57,16 @@ def main() -> None:
                 )
 
         case "rrf-search":
+            query = args.query
+            
+            enhancement_method = args.enhance
+            if enhancement_method == "spell":
+                query = spelling_enhancement(query, enhancement_method)
+            
             documents = get_movies()
             search = HybridSearch(documents)
 
-            results = search.rrf_search(args.query, k=args.k, limit=args.limit)
+            results = search.rrf_search(query, k=args.k, limit=args.limit)
 
             for i, res in enumerate(results, start=1):
                 bm25_rank = res["bm25_rank"] if res["bm25_rank"] != float("inf") else "N/A"
