@@ -6,7 +6,7 @@ if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from cli.load_data import get_movies
-from cli.lib.hybrid_search import HybridSearch, normalize_scores, spelling_enhancement
+from cli.lib.hybrid_search import HybridSearch, enhance_query, normalize_scores
 
 import argparse
 
@@ -27,7 +27,7 @@ def main() -> None:
     ranked_parser.add_argument("query", type=str, help="Search query")
     ranked_parser.add_argument("--k", type=int, default=60, help="RRF parameter k (default: 60)")
     ranked_parser.add_argument("--limit", type=int, default=5, help="Number of results to return (default: 5)")
-    ranked_parser.add_argument("--enhance", type=str, choices=["spell"], help="Query enhancement method")
+    ranked_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite"], help="Query enhancement method")
 
     args = parser.parse_args()
 
@@ -60,9 +60,9 @@ def main() -> None:
             query = args.query
             
             enhancement_method = args.enhance
-            if enhancement_method == "spell":
-                query = spelling_enhancement(query, enhancement_method)
-            
+            if enhancement_method:
+                query = enhance_query(query, enhancement_method)
+           
             documents = get_movies()
             search = HybridSearch(documents)
 

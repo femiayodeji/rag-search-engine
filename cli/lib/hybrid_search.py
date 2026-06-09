@@ -1,6 +1,6 @@
 import os
 
-from cli.constants import get_correct_spelling_prompt
+from cli.constants import get_correct_spelling_prompt, get_rewrite_prompt
 from cli.inverted_index import InvertedIndex
 from cli.lib.chunk_semantic_search import ChunkedSemanticSearch
 from cli.llm_utils import llm_request
@@ -110,8 +110,20 @@ def hybrid_score(
 ) -> float:
     return alpha * bm25_score + (1 - alpha) * semantic_score
 
-def spelling_enhancement(query: str, method: str) -> str:
-    llm_response = llm_request(get_correct_spelling_prompt(query))
+def enhance_query(query: str, method: str) -> str:
+    if not method:
+        return query
+    prompt = get_enhancement_prompt(query, method)
+    llm_response = llm_request(prompt)
     enhanced_query = llm_response.text.strip()
     print(f"Enhanced query ({method}): '{query}' -> '{enhanced_query}'\n")
     return enhanced_query
+
+def get_enhancement_prompt(query: str, method: str) -> str:
+    match method:
+        case "spell":
+            return get_correct_spelling_prompt(query)
+        case "rewrite":
+            return get_rewrite_prompt(query)
+        case _:
+            raise ValueError(f"Unknown enhancement method: {method}")
