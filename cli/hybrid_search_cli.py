@@ -56,7 +56,20 @@ def main() -> None:
                 )
 
         case "rrf-search":
-            pass
+            documents = get_movies()
+            search = HybridSearch(documents)
+
+            results = search.rrf_search(args.query, k=args.k, limit=args.limit)
+
+            for i, res in enumerate(results, start=1):
+                bm25_rank = res["bm25_rank"] if res["bm25_rank"] != float("inf") else "N/A"
+                semantic_rank = res["semantic_rank"] if res["semantic_rank"] != float("inf") else "N/A"
+                print(
+                    f"{i}. {res['title']}\n"
+                    f"  RRF Score: {res['score']:.3f}\n"
+                    f"  BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}\n"
+                    f"  {res['description']}\n"
+                )
 
         case _:
             parser.print_help()

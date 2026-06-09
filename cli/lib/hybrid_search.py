@@ -73,21 +73,26 @@ class HybridSearch:
 
         bm25_ranks = {result["id"]: rank for rank, (result, _) in enumerate(bm25_results, start=1)}
         semantic_ranks = {res["id"]: rank for rank, res in enumerate(semantic_results, start=1)}
-        all_ids = set(bm25_ranks.keys()) | set(semantic_ranks.keys())
-        combined_scores = []
-        for doc_id in all_ids:
-            bm25_rank = bm25_ranks.get(doc_id, float("inf"))
-            semantic_rank = semantic_ranks.get(doc_id, float("inf"))
-            combined_score = self.rrf_score(bm25_rank, k) + self.rrf_score(semantic_rank, k)
-            combined_scores.append((doc_id, combined_score))
-        combined_scores.sort(key=lambda x: x[1], reverse=True)
-        top_docs = []
-        for doc_id, score in combined_scores[:limit]:
-            doc = next((d for d in self.documents if d["id"] == doc_id), None)
-            if doc:
-                top_docs.append({"id": doc_id, "title": doc["title"], "description": doc["description"], "score": score})
-        return top_docs
-    
+
+        document_map = {
+            doc["id"]: {
+                "id": doc["id"],
+                "title": doc["title"],
+                "description": doc["description"],
+                "bm25_rank": bm25_ranks.get(doc["id"], float("inf")),
+                "semantic_rank": semantic_ranks.get(doc["id"], float("inf")),
+            }
+            for doc in self.documents
+        }
+        scored_documents: list[dict] = []
+        for document in document_map.values():
+            rrf_score = self.rrf_score(document["bm25_rank"], k) + self.rrf_score(document["semantic_rank"], k)
+            document["score"] = rrf_score
+            scored_documents.append(document)
+        scored_documents.sort(key=lambda doc: doc["score"], reverse=True)
+        return scored_documents[:limit]
+
+
 def normalize_scores(scores: list[float]) -> list[float]:
     if not scores:
         return []
