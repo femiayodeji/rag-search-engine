@@ -1,9 +1,11 @@
+from asyncio import sleep
 import os
 
-from cli.constants import get_correct_spelling_prompt, get_rewrite_prompt
+from cli.constants import get_correct_spelling_prompt, get_expand_prompt, get_rerank_prompt_individual, get_rewrite_prompt
 from cli.inverted_index import InvertedIndex
 from cli.lib.chunk_semantic_search import ChunkedSemanticSearch
 from cli.llm_utils import llm_request
+from cli.search_utils import DOCUMENT_PREVIEW_LENGTH, format_search_result
 
 
 class HybridSearch:
@@ -76,21 +78,21 @@ class HybridSearch:
         bm25_ranks = {result["id"]: rank for rank, (result, _) in enumerate(bm25_results, start=1)}
         semantic_ranks = {res["id"]: rank for rank, res in enumerate(semantic_results, start=1)}
 
-        document_map = {
-            doc["id"]: {
-                "id": doc["id"],
-                "title": doc["title"],
-                "description": doc["description"],
-                "bm25_rank": bm25_ranks.get(doc["id"], float("inf")),
-                "semantic_rank": semantic_ranks.get(doc["id"], float("inf")),
-            }
-            for doc in self.documents
-        }
         scored_documents: list[dict] = []
-        for document in document_map.values():
-            rrf_score = self.rrf_score(document["bm25_rank"], k) + self.rrf_score(document["semantic_rank"], k)
-            document["score"] = rrf_score
-            scored_documents.append(document)
+        for doc in self.documents:
+            doc_id = doc["id"]
+            bm25_rank = bm25_ranks.get(doc_id, float("inf"))
+            semantic_rank = semantic_ranks.get(doc_id, float("inf"))
+            rrf_score = self.rrf_score(bm25_rank, k) + self.rrf_score(semantic_rank, k)
+            scored_documents.append(
+                format_search_result(
+                    doc_id=doc_id,
+                    title=doc["title"],
+                    document=doc["description"],
+                    score=rrf_score,
+                    metadata={"bm25_rank": bm25_rank, "semantic_rank": semantic_rank},
+                )
+            )
         scored_documents.sort(key=lambda doc: doc["score"], reverse=True)
         return scored_documents[:limit]
 
@@ -125,5 +127,27 @@ def get_enhancement_prompt(query: str, method: str) -> str:
             return get_correct_spelling_prompt(query)
         case "rewrite":
             return get_rewrite_prompt(query)
+        case "expand":
+            return get_expand_prompt(query)
         case _:
             raise ValueError(f"Unknown enhancement method: {method}")
+
+async def rerank_results(query: str, results: list[dict], method: str, limit: int) -> list[dict]:
+    for result in results:
+        prompt = get_rerank_prompt(query, result, method)
+        llm_response = llm_request(prompt)
+        try:
+            score = float(llm_response.text.strip())
+        except ValueError:
+            score = 0.0
+        result["re_rank_score"] = score
+        await sleep(3)  # To avoid hitting rate limits
+    results.sort(key=lambda r: r["re_rank_score"], reverse=True)
+    return results[:limit]
+
+def get_rerank_prompt(query: str, doc: dict, method: str) -> str:
+    match method:
+        case "individual":
+            return get_rerank_prompt_individual(query, doc)
+        case _:
+            raise ValueError(f"Unknown reranking method: {method}")

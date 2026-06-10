@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 import sys
+import asyncio
 from pathlib import Path
 
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from cli.load_data import get_movies
-from cli.lib.hybrid_search import HybridSearch, enhance_query, normalize_scores
+from cli.lib.hybrid_search import HybridSearch, enhance_query, normalize_scores, rerank_results
 
 import argparse
 
 
-def main() -> None:
+async def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -27,7 +28,8 @@ def main() -> None:
     ranked_parser.add_argument("query", type=str, help="Search query")
     ranked_parser.add_argument("--k", type=int, default=60, help="RRF parameter k (default: 60)")
     ranked_parser.add_argument("--limit", type=int, default=5, help="Number of results to return (default: 5)")
-    ranked_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite"], help="Query enhancement method")
+    ranked_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
+    ranked_parser.add_argument("--rerank-method", type=str, choices=["individual"], help="Method for reranking results (default: individual)")
 
     args = parser.parse_args()
 
@@ -66,20 +68,36 @@ def main() -> None:
             documents = get_movies()
             search = HybridSearch(documents)
 
-            results = search.rrf_search(query, k=args.k, limit=args.limit)
+            limit = args.limit
+            rerank_method = args.rerank_method
 
-            for i, res in enumerate(results, start=1):
-                bm25_rank = res["bm25_rank"] if res["bm25_rank"] != float("inf") else "N/A"
-                semantic_rank = res["semantic_rank"] if res["semantic_rank"] != float("inf") else "N/A"
-                print(
-                    f"{i}. {res['title']}\n"
-                    f"  RRF Score: {res['score']:.3f}\n"
-                    f"  BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}\n"
-                    f"  {res['description']}\n"
-                )
+            results = search.rrf_search(query, k=args.k, limit=limit * 5 if rerank_method == "individual" else limit)
+            
+            if rerank_method == "individual":
+                print(f"\nRe-ranking top {limit} results using {rerank_method} method...\n")
+                print(f"Reciprocal Rank Fusion Results for '{query}' (k=60):\n")
+                results = await rerank_results(query, results, method=rerank_method, limit=limit)
+                for i, res in enumerate(results, start=1):
+                    print(
+                        f"{i}. {res['title']}\n"
+                        f"  Re-rank Score: {res['re_rank_score']:.3f}/10\n"
+                        f"  RRF Score: {res['score']:.3f}\n"
+                        f"  BM25 Rank: {res['metadata']['bm25_rank']}, Semantic Rank: {res['metadata']['semantic_rank']}\n"
+                        f"  {res['document']}\n"
+                    )
+            else:
+                for i, res in enumerate(results, start=1):
+                    bm25_rank = res["metadata"]["bm25_rank"] if res["metadata"]["bm25_rank"] != float("inf") else "N/A"
+                    semantic_rank = res["metadata"]["semantic_rank"] if res["metadata"]["semantic_rank"] != float("inf") else "N/A"
+                    print(
+                        f"{i}. {res['title']}\n"
+                        f"  RRF Score: {res['score']:.3f}\n"
+                        f"  BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}\n"
+                        f"  {res['document']}\n"
+                    )
 
         case _:
             parser.print_help()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
