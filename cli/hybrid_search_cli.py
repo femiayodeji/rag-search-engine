@@ -29,7 +29,7 @@ async def main() -> None:
     ranked_parser.add_argument("--k", type=int, default=60, help="RRF parameter k (default: 60)")
     ranked_parser.add_argument("--limit", type=int, default=5, help="Number of results to return (default: 5)")
     ranked_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
-    ranked_parser.add_argument("--rerank-method", type=str, choices=["individual"], help="Method for reranking results (default: individual)")
+    ranked_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch"], help="Method for reranking results (default: individual)")
 
     args = parser.parse_args()
 
@@ -73,14 +73,19 @@ async def main() -> None:
 
             results = search.rrf_search(query, k=args.k, limit=limit * 5 if rerank_method == "individual" else limit)
             
-            if rerank_method == "individual":
+            if rerank_method:
                 print(f"\nRe-ranking top {limit} results using {rerank_method} method...\n")
                 print(f"Reciprocal Rank Fusion Results for '{query}' (k=60):\n")
                 results = await rerank_results(query, results, method=rerank_method, limit=limit)
                 for i, res in enumerate(results, start=1):
+                    rerank_str = ""
+                    if rerank_method == "individual":
+                        rerank_str = f"Re-rank Score: {res.get('re_rank_score', 0.0):.3f}/10\n"
+                    elif rerank_method == "batch":
+                        rerank_str = f"Re-rank Rank: {res.get('re_rank_rank', 0)}\n"
                     print(
                         f"{i}. {res['title']}\n"
-                        f"  Re-rank Score: {res['re_rank_score']:.3f}/10\n"
+                        f"{rerank_str}"
                         f"  RRF Score: {res['score']:.3f}\n"
                         f"  BM25 Rank: {res['metadata']['bm25_rank']}, Semantic Rank: {res['metadata']['semantic_rank']}\n"
                         f"  {res['document']}\n"

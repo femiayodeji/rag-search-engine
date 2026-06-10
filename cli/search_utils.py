@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class Movie(TypedDict):
@@ -15,6 +15,8 @@ class SearchResult(TypedDict):
     document: str
     score: float
     metadata: dict[str, Any]
+    re_rank_rank: NotRequired[int | float]
+    re_rank_score: NotRequired[float]
 
 
 class GoldenTestCase(TypedDict):

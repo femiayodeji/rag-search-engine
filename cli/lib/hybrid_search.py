@@ -1,11 +1,12 @@
 from asyncio import sleep
+import json
 import os
 
-from cli.constants import get_correct_spelling_prompt, get_expand_prompt, get_rerank_prompt_individual, get_rewrite_prompt
+from cli.constants import get_correct_spelling_prompt, get_expand_prompt, get_rerank_prompt_batch, get_rerank_prompt_individual, get_rewrite_prompt
 from cli.inverted_index import InvertedIndex
 from cli.lib.chunk_semantic_search import ChunkedSemanticSearch
 from cli.llm_utils import llm_request
-from cli.search_utils import DOCUMENT_PREVIEW_LENGTH, format_search_result
+from cli.search_utils import SearchResult, format_search_result
 
 
 class HybridSearch:
@@ -23,7 +24,7 @@ class HybridSearch:
         self.idx.load()
         return self.idx.bm25_search(query, limit)
 
-    def rrf_score(self, rank: int, k: int = 60) -> float:
+    def rrf_score(self, rank: int | float, k: int = 60) -> float:
         return 1 / (k + rank)    
 
     def weighted_search(self, query: str, alpha: float = 0.5, limit: int = 5) -> list[dict]:
@@ -71,14 +72,14 @@ class HybridSearch:
         scored_documents.sort(key=lambda doc: doc["hybrid_score"], reverse=True)
         return scored_documents[:limit]
 
-    def rrf_search(self, query: str, k: int = 60, limit: int = 5) -> list[dict]:
+    def rrf_search(self, query: str, k: int = 60, limit: int = 5) -> list[SearchResult]:
         bm25_results = self._bm25_search(query, limit * 500)
         semantic_results = self.semantic_search.search_chunks(query, limit * 500)
 
         bm25_ranks = {result["id"]: rank for rank, (result, _) in enumerate(bm25_results, start=1)}
         semantic_ranks = {res["id"]: rank for rank, res in enumerate(semantic_results, start=1)}
 
-        scored_documents: list[dict] = []
+        scored_documents: list[SearchResult] = []
         for doc in self.documents:
             doc_id = doc["id"]
             bm25_rank = bm25_ranks.get(doc_id, float("inf"))
@@ -117,7 +118,7 @@ def enhance_query(query: str, method: str) -> str:
         return query
     prompt = get_enhancement_prompt(query, method)
     llm_response = llm_request(prompt)
-    enhanced_query = llm_response.text.strip()
+    enhanced_query = (llm_response.text or "").strip()
     print(f"Enhanced query ({method}): '{query}' -> '{enhanced_query}'\n")
     return enhanced_query
 
@@ -132,22 +133,32 @@ def get_enhancement_prompt(query: str, method: str) -> str:
         case _:
             raise ValueError(f"Unknown enhancement method: {method}")
 
-async def rerank_results(query: str, results: list[dict], method: str, limit: int) -> list[dict]:
-    for result in results:
-        prompt = get_rerank_prompt(query, result, method)
-        llm_response = llm_request(prompt)
+async def rerank_results(query: str, results: list[SearchResult], method: str, limit: int) -> list[SearchResult]:
+    if method == "batch":
+        doc_list_str = "\n".join([f"{res['title']} - {res['document']}..." for res in results])
+        prompt = get_rerank_prompt_batch(query, doc_list_str)
         try:
-            score = float(llm_response.text.strip())
-        except ValueError:
-            score = 0.0
-        result["re_rank_score"] = score
-        await sleep(3)  # To avoid hitting rate limits
-    results.sort(key=lambda r: r["re_rank_score"], reverse=True)
+            llm_response = llm_request(prompt)
+            ranked_movie_ids: list[int] = json.loads((llm_response.text or "[]").strip())
+            movie_id_to_rank = {movie_id: rank for rank, movie_id in enumerate(ranked_movie_ids, start=1)}
+            for result in results:
+                result["re_rank_rank"] = movie_id_to_rank.get(result["id"], float("inf"))
+            results.sort(key=lambda r: r.get("re_rank_rank", float("inf")))
+            return results[:limit]
+        except (ValueError, json.JSONDecodeError, RuntimeError):
+            for result in results:
+                result["re_rank_rank"] = 0.0
+
+    elif method == "individual":
+        for result in results:
+            prompt = get_rerank_prompt_individual(query, result)
+            try:
+                llm_response = llm_request(prompt)
+                score = float((llm_response.text or "0").strip())
+            except (ValueError, RuntimeError):
+                score = 0.0
+            result["re_rank_score"] = score
+            await sleep(3)  # To avoid hitting rate limits
+    results.sort(key=lambda r: r.get("re_rank_score", 0.0), reverse=True)
     return results[:limit]
 
-def get_rerank_prompt(query: str, doc: dict, method: str) -> str:
-    match method:
-        case "individual":
-            return get_rerank_prompt_individual(query, doc)
-        case _:
-            raise ValueError(f"Unknown reranking method: {method}")

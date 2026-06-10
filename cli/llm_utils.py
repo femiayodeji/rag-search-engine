@@ -11,8 +11,10 @@ from google.genai.types import GenerateContentResponse
 
 client = genai.Client(api_key=api_key)
 
-client_response: GenerateContentResponse = client.models.generate_content(model="gemma-4-31b-it", contents="Why is Boot.dev such a great place to learn about RAG? Use one paragraph maximum.")
-
 def llm_request(query: str, model="gemma-4-31b-it") -> GenerateContentResponse:
-    response: GenerateContentResponse = client.models.generate_content(model=model, contents=query)
+    try:
+       response: GenerateContentResponse = client.models.generate_content(model=model, contents=query)
+    except Exception as e:
+        print(f"LLM request failed: {e}")
+        raise RuntimeError("LLM request failed") from e
     return response

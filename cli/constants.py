@@ -1,3 +1,6 @@
+from typing import Any, Mapping
+
+
 def get_correct_spelling_prompt(query: str) -> str:
     return f"""Fix any spelling errors in the user-provided movie search query below.
     Correct only clear, high-confidence typos. Do not rewrite, add, remove, or reorder words.
@@ -43,7 +46,7 @@ Examples:
 User query: "{query}"
 """
 
-def get_rerank_prompt_individual(query: str, doc: dict) -> str:
+def get_rerank_prompt_individual(query: str, doc: Mapping[str, Any]) -> str:
     return f"""Rate how well this movie matches the search query.
 
 Query: "{query}"
@@ -58,3 +61,22 @@ Rate 0-10 (10 = perfect match).
 Output ONLY the number in your response, no other text or explanation.
 
 Score:"""
+
+def get_rerank_prompt_batch(query: str, doc_list_str: str) -> str:
+    return f"""Rank the movies listed below by relevance to the following search query.
+
+Query: "{query}"
+
+Movies:
+{doc_list_str}
+
+Return the movie IDs in order of relevance, best match first.
+
+Your response must be a raw JSON array of integers.
+Do not wrap the JSON in Markdown. Do not use a ```json code block.
+Do not include any explanatory text.
+
+For example:
+[75, 12, 34, 2, 1]
+
+Ranking:"""
