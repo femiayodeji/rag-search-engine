@@ -7,7 +7,7 @@ if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from cli.load_data import get_movies
-from cli.lib.hybrid_search import HybridSearch, enhance_query, normalize_scores, rerank_results
+from cli.lib.hybrid_search import HybridSearch, rerank_cross_encoder, enhance_query, normalize_scores, rerank_llm
 
 import argparse
 
@@ -29,7 +29,7 @@ async def main() -> None:
     ranked_parser.add_argument("--k", type=int, default=60, help="RRF parameter k (default: 60)")
     ranked_parser.add_argument("--limit", type=int, default=5, help="Number of results to return (default: 5)")
     ranked_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
-    ranked_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch"], help="Method for reranking results (default: individual)")
+    ranked_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="Method for reranking results (default: individual)")
 
     args = parser.parse_args()
 
@@ -76,20 +76,32 @@ async def main() -> None:
             if rerank_method:
                 print(f"\nRe-ranking top {limit} results using {rerank_method} method...\n")
                 print(f"Reciprocal Rank Fusion Results for '{query}' (k=60):\n")
-                results = await rerank_results(query, results, method=rerank_method, limit=limit)
-                for i, res in enumerate(results, start=1):
-                    rerank_str = ""
-                    if rerank_method == "individual":
-                        rerank_str = f"Re-rank Score: {res.get('re_rank_score', 0.0):.3f}/10\n"
-                    elif rerank_method == "batch":
-                        rerank_str = f"Re-rank Rank: {res.get('re_rank_rank', 0)}\n"
-                    print(
-                        f"{i}. {res['title']}\n"
-                        f"{rerank_str}"
-                        f"  RRF Score: {res['score']:.3f}\n"
-                        f"  BM25 Rank: {res['metadata']['bm25_rank']}, Semantic Rank: {res['metadata']['semantic_rank']}\n"
-                        f"  {res['document']}\n"
-                    )
+                if rerank_method in ["individual", "batch"]:
+                    results = await rerank_llm(query, results, method=rerank_method, limit=limit)
+                    for i, res in enumerate(results, start=1):
+                        rerank_str = ""
+                        if rerank_method == "individual":
+                            rerank_str = f"Re-rank Score: {res.get('re_rank_score', 0.0):.3f}/10\n"
+                        elif rerank_method == "batch":
+                            rerank_str = f"Re-rank Rank: {res.get('re_rank_rank', 0)}\n"
+                        print(
+                            f"{i}. {res['title']}\n"
+                            f"{rerank_str}"
+                            f"  RRF Score: {res['score']:.3f}\n"
+                            f"  BM25 Rank: {res['metadata']['bm25_rank']}, Semantic Rank: {res['metadata']['semantic_rank']}\n"
+                            f"  {res.get('document', '')[:100] + ("..." if len(res.get('document', '')) > 100 else "")}\n"
+                        )
+                elif rerank_method == "cross_encoder":
+                    results = rerank_cross_encoder(query, results, limit=limit)
+                    for i, res in enumerate(results, start=1):
+                        print(
+                            f"{i}. {res['title']}\n"
+                            f"  Cross Encoder Score: {res.get('cross_encoder_score', 0.0):.3f}\n"
+                            f"  RRF Score: {res['score']:.3f}\n"
+                            f"  BM25 Rank: {res['metadata']['bm25_rank']}, Semantic Rank: {res['metadata']['semantic_rank']}\n"
+                            f"  {res.get('document', '')[:100] + ("..." if len(res.get('document', '')) > 100 else "")}\n"
+                        )
+                    
             else:
                 for i, res in enumerate(results, start=1):
                     bm25_rank = res["metadata"]["bm25_rank"] if res["metadata"]["bm25_rank"] != float("inf") else "N/A"
@@ -98,7 +110,7 @@ async def main() -> None:
                         f"{i}. {res['title']}\n"
                         f"  RRF Score: {res['score']:.3f}\n"
                         f"  BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}\n"
-                        f"  {res['document']}\n"
+                        f"  {res.get('document', '')[:100] + ("..." if len(res.get('document', '')) > 100 else "")}\n"
                     )
 
         case _:

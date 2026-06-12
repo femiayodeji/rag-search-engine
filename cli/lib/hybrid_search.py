@@ -8,6 +8,8 @@ from cli.lib.chunk_semantic_search import ChunkedSemanticSearch
 from cli.llm_utils import llm_request
 from cli.search_utils import SearchResult, format_search_result
 
+from sentence_transformers import CrossEncoder
+
 
 class HybridSearch:
     def __init__(self, documents: list[dict]) -> None:
@@ -133,7 +135,7 @@ def get_enhancement_prompt(query: str, method: str) -> str:
         case _:
             raise ValueError(f"Unknown enhancement method: {method}")
 
-async def rerank_results(query: str, results: list[SearchResult], method: str, limit: int) -> list[SearchResult]:
+async def rerank_llm(query: str, results: list[SearchResult], method: str, limit: int) -> list[SearchResult]:
     if method == "batch":
         doc_list_str = "\n".join([f"{res['title']} - {res['document']}..." for res in results])
         prompt = get_rerank_prompt_batch(query, doc_list_str)
@@ -162,3 +164,11 @@ async def rerank_results(query: str, results: list[SearchResult], method: str, l
     results.sort(key=lambda r: r.get("re_rank_score", 0.0), reverse=True)
     return results[:limit]
 
+def rerank_cross_encoder(query: str, results: list[SearchResult], limit: int) -> list[SearchResult]:
+    pairs = [[query, f"{res.get('title', '')} - {res.get('document', '')}"] for res in results]
+    cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+    scores = cross_encoder.predict(pairs)
+    for i, (result, score) in enumerate(zip(results, scores), start=1):
+        result["metadata"]["cross_encoder_score"] = score
+    results.sort(key=lambda x: x["metadata"].get("cross_encoder_score", 0.0), reverse=True)
+    return results[:limit]
