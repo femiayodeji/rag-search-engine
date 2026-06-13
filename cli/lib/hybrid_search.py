@@ -1,8 +1,9 @@
 from asyncio import sleep
 import json
 import os
+import re
 
-from cli.constants import get_correct_spelling_prompt, get_expand_prompt, get_rerank_prompt_batch, get_rerank_prompt_individual, get_rewrite_prompt
+from cli.constants import get_correct_spelling_prompt, get_evaluation_prompt, get_expand_prompt, get_rerank_prompt_batch, get_rerank_prompt_individual, get_rewrite_prompt
 from cli.inverted_index import InvertedIndex
 from cli.lib.chunk_semantic_search import ChunkedSemanticSearch
 from cli.llm_utils import llm_request
@@ -172,3 +173,20 @@ def rerank_cross_encoder(query: str, results: list[SearchResult], limit: int) ->
         result["metadata"]["cross_encoder_score"] = score
     results.sort(key=lambda x: x["metadata"].get("cross_encoder_score", 0.0), reverse=True)
     return results[:limit]
+
+async def evaluate_results(query: str, formatted_results: list[SearchResult]) -> list[SearchResult]:
+    result_strings = [f"{i}. {res['title']}: {res.get('document', '')[:200]}" for i, res in enumerate(formatted_results, 1)]
+    evaluation_prompt = get_evaluation_prompt(query, result_strings)
+    try:
+        llm_response = llm_request(evaluation_prompt)
+        raw = (llm_response.text or "[]").strip()
+        raw = re.sub(r"^```[a-z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+        scores: list[int] = json.loads(raw.strip())
+        for result, score in zip(formatted_results, scores):
+            result["metadata"]["evaluation_score"] = score
+        return formatted_results
+    except (ValueError, json.JSONDecodeError, RuntimeError):
+        for result in formatted_results:
+            result["metadata"]["evaluation_score"] = 0
+        return formatted_results

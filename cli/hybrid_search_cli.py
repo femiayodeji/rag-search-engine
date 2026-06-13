@@ -7,7 +7,7 @@ if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from cli.load_data import get_movies
-from cli.lib.hybrid_search import HybridSearch, rerank_cross_encoder, enhance_query, normalize_scores, rerank_llm
+from cli.lib.hybrid_search import HybridSearch, evaluate_results, rerank_cross_encoder, enhance_query, normalize_scores, rerank_llm
 
 import argparse
 
@@ -30,6 +30,7 @@ async def main() -> None:
     ranked_parser.add_argument("--limit", type=int, default=5, help="Number of results to return (default: 5)")
     ranked_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
     ranked_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="Method for reranking results (default: individual)")
+    ranked_parser.add_argument("--evaluate", action="store_true", default=False, help="Evaluate and rate the search results (default: False)")
 
     args = parser.parse_args()
 
@@ -112,6 +113,12 @@ async def main() -> None:
                         f"  BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}\n"
                         f"  {res.get('document', '')[:100] + ("..." if len(res.get('document', '')) > 100 else "")}\n"
                     )
+            if args.evaluate:
+                print("\nEvaluating the results...\n")
+                evaluation_results = await evaluate_results(query, results)
+                for i, res in enumerate(evaluation_results, start=1):
+                    score = res["metadata"].get("evaluation_score", 0)
+                    print(f"{i}. {res.get('title', '')}: {score}/3")
 
         case _:
             parser.print_help()
