@@ -81,7 +81,7 @@ For example:
 
 Ranking:"""
 
-def get_evaluation_prompt(query: str, formatted_results) -> str:
+def get_evaluation_prompt(query: str, formatted_results: list[str]) -> str:
     return f"""Rate how relevant each result is to this query on a 0-3 scale:
 
 Query: "{query}"
@@ -100,3 +100,15 @@ Do NOT give any numbers other than 0, 1, 2, or 3.
 Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
 
 [2, 0, 3, 2, 0, 1]"""
+
+def get_rag_prompt(query: str, docs: str) -> str:
+    return f"""You are a RAG agent for Hoopla, a movie streaming service.
+Your task is to provide a natural-language answer to the user's query based on documents retrieved during search.
+Provide a comprehensive answer that addresses the user's query.
+
+Query: {query}
+
+Documents:
+{docs}
+
+Answer:"""
