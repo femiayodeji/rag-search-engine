@@ -5,7 +5,7 @@ if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 
-from cli.lib.rag import get_rag_results, get_summary_rag_prompt
+from cli.lib.rag import get_rag_results, get_rag_results_citation, get_rag_results_summary
 from cli.lib.hybrid_search import HybridSearch
 from cli.load_data import get_movies
 
@@ -26,7 +26,11 @@ def main() -> None:
     summary_parser.add_argument("query", type=str, help="Search query for summary generation")
     summary_parser.add_argument("--limit", type=int, default=5, help="Number of search results to use for summary (default: 5)")
 
-
+    citations_parser = subparsers.add_parser(
+        "citations", help="Generate a search result summary with citations using RAG"
+    )
+    citations_parser.add_argument("query", type=str, help="Search query for citation summary generation")
+    citations_parser.add_argument("--limit", type=int, default=5, help="Number of search results to use for citation summary (default: 5)")
 
     args = parser.parse_args()
 
@@ -54,9 +58,21 @@ def main() -> None:
                 print(f"- {res.get('title', '')}")
 
             print(f"LLM Summary:")
-            rag_summary = get_summary_rag_prompt(query, results)
+            rag_summary = get_rag_results_summary(query, results)
             print(rag_summary)
 
+        case "citations":
+            query = args.query
+            documents = get_movies()
+            search = HybridSearch(documents)
+            results = search.rrf_search(query, limit=args.limit)
+            print(f"Search Results:")
+            for res in results:
+                print(f"- {res.get('title', '')}")
+
+            print(f"LLM Answer:")
+            rag_citation_summary = get_rag_results_citation(query, results)
+            print(rag_citation_summary)
 
         case _:
             parser.print_help()
