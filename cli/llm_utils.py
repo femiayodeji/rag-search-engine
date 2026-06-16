@@ -18,3 +18,12 @@ def llm_request(query: str, model="gemma-4-31b-it") -> GenerateContentResponse:
         print(f"LLM request failed: {e}")
         raise RuntimeError("LLM request failed") from e
     return response
+
+
+def llm_request_parts(parts: list, model="gemma-4-31b-it"):
+    try:
+       response: GenerateContentResponse = client.models.generate_content(model=model, contents=parts)
+    except Exception as e:
+        print(f"LLM request failed: {e}")
+        raise RuntimeError("LLM request failed") from e
+    return response
